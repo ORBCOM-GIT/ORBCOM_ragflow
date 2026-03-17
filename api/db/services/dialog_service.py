@@ -201,6 +201,29 @@ class DialogService(CommonService):
         ]
         objs = cls.model.select(*fields).where(cls.model.tenant_rerank_id.is_null())
         return list(objs)
+    
+    @classmethod
+    @DB.connection_context()
+    def bulk_update_prompt_config(cls, prompt_updates):
+        dialogs = cls.query(status=StatusEnum.VALID.value)
+
+        data_list = []
+
+        for dialog in dialogs:
+            prompt_config = deepcopy(dialog.prompt_config or {})
+            prompt_config.update(prompt_updates)
+
+            data_list.append({
+                "id": dialog.id,
+                "prompt_config": prompt_config,
+            })
+
+        if not data_list:
+            return 0
+
+        cls.update_many_by_id(data_list)
+        return len(data_list)
+
 
 
 async def async_chat_solo(dialog, messages, stream=True):

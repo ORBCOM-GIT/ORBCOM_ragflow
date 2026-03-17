@@ -21,7 +21,7 @@ from common.constants import StatusEnum
 from api.db.services.tenant_llm_service import TenantLLMService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.user_service import TenantService, UserTenantService
-from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, server_error_response, validate_request
+from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, server_error_response, validate_request, token_required
 from api.utils.tenant_utils import ensure_tenant_model_id_for_params
 from common.misc_utils import get_uuid
 from common.constants import RetCode
@@ -145,6 +145,33 @@ async def set_dialog():
             dia.update(dialog_info)
             dia["kb_ids"], dia["kb_names"] = get_kb_names(dia["kb_ids"])
             return get_json_result(data=dia)
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/bulk_update_prompt_config', methods=['POST']) # noqa: F821
+@token_required
+async def bulk_update_prompt_config(tenant_id):
+    try:
+        req = await get_request_json()
+
+        allowed_keys = {"system", "empty_response", "prologue"}
+
+        if not req or not isinstance(req, dict):
+            return get_data_error_result(message="Request body must be a JSON object.")
+
+        unexpected_keys = set(req.keys()) - allowed_keys
+        if unexpected_keys:
+            return get_data_error_result(message="Unsupported fields found.")
+
+        for key, value in req.items():
+            if not isinstance(value, str):
+                return get_data_error_result(message=f"Field '{key}' must be a string.")
+
+        updated_count = DialogService.bulk_update_prompt_config(req)
+
+        return get_json_result(data={"updated_count": updated_count})
+
     except Exception as e:
         return server_error_response(e)
 
