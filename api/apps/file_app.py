@@ -17,7 +17,12 @@ import logging
 import os
 import pathlib
 import re
+from typing import Any
+
 from quart import request, make_response
+from pydantic import BaseModel, ConfigDict, Field
+from quart_schema import DataSource, document_querystring, document_request, document_response, tag
+
 from api.apps import login_required, current_user
 
 from api.common.check_team_permission import check_file_team_permission
@@ -34,10 +39,92 @@ from api.utils.file_utils import filename_type
 from api.utils.web_utils import CONTENT_TYPE_MAP, apply_safe_file_response_headers
 from common import settings
 
+
+class ErrorResponse(BaseModel):
+    code: int
+    message: str
+    data: Any | None = None
+
+
+class GenericSuccessResponse(BaseModel):
+    code: int = 0
+    data: Any | None = None
+    message: str = "success"
+
+
+class FileUploadFormDoc(BaseModel):
+    file: list[Any] | None = Field(default=None, description="Files to upload.")
+    parent_id: str | None = Field(default=None, description="Destination parent folder ID.")
+
+
+class FileCreateBodyDoc(BaseModel):
+    name: str
+    parent_id: str | None = None
+    type: str | None = Field(default=None, description="Folder or virtual file type.")
+    model_config = ConfigDict(extra="allow")
+
+
+class FileListQueryDoc(BaseModel):
+    parent_id: str | None = Field(default=None, description="Parent folder ID.")
+    keywords: str | None = Field(default=None, description="Optional keyword filter.")
+    page: int | None = Field(default=1, description="Page number.")
+    page_size: int | None = Field(default=15, description="Items per page.")
+    orderby: str | None = Field(default="create_time", description="Sort field.")
+    desc: bool | None = Field(default=True, description="Whether to sort descending.")
+
+
+class FileLookupQueryDoc(BaseModel):
+    file_id: str
+
+
+class FileDeleteBodyDoc(BaseModel):
+    file_ids: list[str]
+
+
+class FileRenameBodyDoc(BaseModel):
+    file_id: str
+    name: str
+
+
+class FileMoveBodyDoc(BaseModel):
+    src_file_ids: list[str]
+    dest_file_id: str
+
+
+class FileRecordDoc(BaseModel):
+    id: str | None = None
+    parent_id: str | None = None
+    tenant_id: str | None = None
+    created_by: str | None = None
+    type: str | int | None = None
+    name: str | None = None
+    location: str | None = None
+    size: int | None = None
+    source_type: str | None = None
+    model_config = ConfigDict(extra="allow")
+
+
+class FileListDataDoc(BaseModel):
+    total: int
+    files: list[FileRecordDoc]
+    parent_folder: dict[str, Any] | None = None
+
+
+class FileListResponseDoc(BaseModel):
+    code: int = 0
+    data: FileListDataDoc
+    message: str = "success"
+
+
 @manager.route('/upload', methods=['POST'])  # noqa: F821
 @login_required
 # @validate_request("parent_id")
+@tag(["Files"])
+@document_request(FileUploadFormDoc, source=DataSource.FORM_MULTIPART)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def upload():
+    """Upload files to a folder."""
     form = await request.form
     pf_id = form.get("parent_id")
 
@@ -129,7 +216,12 @@ async def upload():
 @manager.route('/create', methods=['POST'])  # noqa: F821
 @login_required
 @validate_request("name")
+@tag(["Files"])
+@document_request(FileCreateBodyDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def create():
+    """Create a folder or virtual file."""
     req = await get_request_json()
     pf_id = req.get("parent_id")
     input_file_type = req.get("type")
@@ -168,7 +260,12 @@ async def create():
 
 @manager.route('/list', methods=['GET'])  # noqa: F821
 @login_required
+@tag(["Files"])
+@document_querystring(FileListQueryDoc)
+@document_response(FileListResponseDoc)
+@document_response(ErrorResponse, 400)
 def list_files():
+    """List files in a folder."""
     pf_id = request.args.get("parent_id")
 
     keywords = request.args.get("keywords", "")
@@ -200,7 +297,11 @@ def list_files():
 
 @manager.route('/root_folder', methods=['GET'])  # noqa: F821
 @login_required
+@tag(["Files"])
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 def get_root_folder():
+    """Get the root folder for the current user."""
     try:
         root_folder = FileService.get_root_folder(current_user.id)
         return get_json_result(data={"root_folder": root_folder})
@@ -210,7 +311,12 @@ def get_root_folder():
 
 @manager.route('/parent_folder', methods=['GET'])  # noqa: F821
 @login_required
+@tag(["Files"])
+@document_querystring(FileLookupQueryDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 def get_parent_folder():
+    """Get the parent folder of a file or folder."""
     file_id = request.args.get("file_id")
     try:
         e, file = FileService.get_by_id(file_id)
@@ -225,7 +331,12 @@ def get_parent_folder():
 
 @manager.route('/all_parent_folder', methods=['GET'])  # noqa: F821
 @login_required
+@tag(["Files"])
+@document_querystring(FileLookupQueryDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 def get_all_parent_folders():
+    """Get all ancestor folders for a file or folder."""
     file_id = request.args.get("file_id")
     try:
         e, file = FileService.get_by_id(file_id)
@@ -244,7 +355,12 @@ def get_all_parent_folders():
 @manager.route("/rm", methods=["POST"])  # noqa: F821
 @login_required
 @validate_request("file_ids")
+@tag(["Files"])
+@document_request(FileDeleteBodyDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def rm():
+    """Delete files or folders."""
     req = await get_request_json()
     file_ids = req["file_ids"]
     uid = current_user.id
@@ -309,7 +425,12 @@ async def rm():
 @manager.route('/rename', methods=['POST'])  # noqa: F821
 @login_required
 @validate_request("file_id", "name")
+@tag(["Files"])
+@document_request(FileRenameBodyDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def rename():
+    """Rename a file or folder."""
     req = await get_request_json()
     try:
         e, file = FileService.get_by_id(req["file_id"])
@@ -348,7 +469,11 @@ async def rename():
 
 @manager.route('/get/<file_id>', methods=['GET'])  # noqa: F821
 @login_required
+@tag(["Files"])
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def get(file_id):
+    """Download file content by file ID."""
     try:
         e, file = FileService.get_by_id(file_id)
         if not e:
@@ -377,7 +502,12 @@ async def get(file_id):
 @manager.route("/mv", methods=["POST"])  # noqa: F821
 @login_required
 @validate_request("src_file_ids", "dest_file_id")
+@tag(["Files"])
+@document_request(FileMoveBodyDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def move():
+    """Move files or folders to another folder."""
     req = await get_request_json()
     try:
         file_ids = req["src_file_ids"]
