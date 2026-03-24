@@ -14,13 +14,17 @@
 #  limitations under the License.
 #
 import logging
+from typing import Any
 
 from peewee import OperationalError
 from quart import request
+from pydantic import BaseModel, ConfigDict
+from quart_schema import document_querystring, document_request, document_response, tag
 from common.constants import RetCode
 from api.apps import login_required, current_user
 from api.utils.api_utils import get_error_argument_result, get_error_data_result, get_result, add_tenant_id_to_kwargs
 from api.utils.validation_utils import (
+    AutoMetadataConfig,
     CreateDatasetReq,
     DeleteDatasetReq,
     ListDatasetReq,
@@ -31,9 +35,29 @@ from api.utils.validation_utils import (
 from api.apps.services import dataset_api_service
 
 
+class ErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    code: int = 0
+    data: Any | None = None
+    message: str = "string"
+
+
+class SuccessResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    code: int = 0
+    data: Any | None = None
+    message: str = "success"
+
+
 @manager.route("/datasets", methods=["POST"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Datasets"])
+@document_request(CreateDatasetReq)
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def create(tenant_id: str=None):
     """
     Create a new dataset.
@@ -110,6 +134,10 @@ async def create(tenant_id: str=None):
 @manager.route("/datasets", methods=["DELETE"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Datasets"])
+@document_request(DeleteDatasetReq)
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def delete(tenant_id):
     """
     Delete datasets.
@@ -169,6 +197,10 @@ async def delete(tenant_id):
 @manager.route("/datasets/<dataset_id>", methods=["PUT"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Datasets"])
+@document_request(UpdateDatasetReq)
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def update(tenant_id, dataset_id):
     """
     Update a dataset.
@@ -256,6 +288,10 @@ async def update(tenant_id, dataset_id):
 @manager.route("/datasets", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Datasets"])
+@document_querystring(ListDatasetReq)
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 def list_datasets(tenant_id):
     """
     List datasets.
@@ -333,6 +369,9 @@ def list_datasets(tenant_id):
 @manager.route('/datasets/<dataset_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def knowledge_graph(tenant_id, dataset_id):
     try:
         success, result = await dataset_api_service.get_knowledge_graph(dataset_id, tenant_id)
@@ -352,6 +391,9 @@ async def knowledge_graph(tenant_id, dataset_id):
 @manager.route('/datasets/<dataset_id>/knowledge_graph', methods=['DELETE'])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 def delete_knowledge_graph(tenant_id, dataset_id):
     try:
         success, result = dataset_api_service.delete_knowledge_graph(dataset_id, tenant_id)
@@ -371,6 +413,9 @@ def delete_knowledge_graph(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/run_graphrag", methods=["POST"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def run_graphrag(tenant_id, dataset_id):
     try:
         success, result = dataset_api_service.run_graphrag(dataset_id, tenant_id)
@@ -386,6 +431,9 @@ async def run_graphrag(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/trace_graphrag", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 def trace_graphrag(tenant_id, dataset_id):
     try:
         success, result = dataset_api_service.trace_graphrag(dataset_id, tenant_id)
@@ -401,6 +449,9 @@ def trace_graphrag(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/run_raptor", methods=["POST"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def run_raptor(tenant_id, dataset_id):
     try:
         success, result = dataset_api_service.run_raptor(dataset_id, tenant_id)
@@ -416,6 +467,9 @@ async def run_raptor(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/trace_raptor", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Graph Processing"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 def trace_raptor(tenant_id, dataset_id):
     try:
         success, result = dataset_api_service.trace_raptor(dataset_id, tenant_id)
@@ -431,6 +485,9 @@ def trace_raptor(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/auto_metadata", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Auto Metadata"])
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 def get_auto_metadata(tenant_id, dataset_id):
     """
     Get auto-metadata configuration for a dataset.
@@ -470,6 +527,10 @@ def get_auto_metadata(tenant_id, dataset_id):
 @manager.route("/datasets/<dataset_id>/auto_metadata", methods=["PUT"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@tag(["Dataset Auto Metadata"])
+@document_request(AutoMetadataConfig)
+@document_response(SuccessResponse)
+@document_response(ErrorResponse, 400)
 async def update_auto_metadata(tenant_id, dataset_id):
     """
     Update auto-metadata configuration for a dataset.
@@ -501,7 +562,6 @@ async def update_auto_metadata(tenant_id, dataset_id):
         schema:
           type: object
     """
-    from api.utils.validation_utils import AutoMetadataConfig
     cfg, err = await validate_and_parse_json_request(request, AutoMetadataConfig)
     if err is not None:
         return get_error_argument_result(err)
