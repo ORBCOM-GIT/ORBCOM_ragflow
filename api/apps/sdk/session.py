@@ -88,6 +88,7 @@ async def create(tenant_id, chat_id):
 async def create_agent_session(tenant_id, agent_id):
     req = await get_request_json()
     user_id = req.get("user_id") or request.args.get("user_id", tenant_id)
+    name = req.get("name")
     release_mode = bool(req.get("release", request.args.get("release", False)))
 
     if not UserCanvasService.query(user_id=tenant_id, id=agent_id):
@@ -110,6 +111,7 @@ async def create_agent_session(tenant_id, agent_id):
     conv = {
         "id": session_id,
         "dialog_id": cvs.id,
+        "name": name,
         "user_id": user_id,
         "message": [{"role": "assistant", "content": canvas.get_prologue()}],
         "source": "agent",
