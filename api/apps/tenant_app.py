@@ -15,6 +15,11 @@
 #
 import logging
 import asyncio
+from typing import Any
+
+from pydantic import BaseModel
+from quart_schema import document_request, document_response, tag
+
 from api.db import UserTenantRole
 from api.db.db_models import UserTenant
 from api.db.services.user_service import UserTenantService, UserService
@@ -28,9 +33,48 @@ from common import settings
 from api.apps import login_required, current_user
 
 
+class ErrorResponse(BaseModel):
+    code: int
+    message: str
+    data: Any | None = None
+
+
+class GenericSuccessResponse(BaseModel):
+    code: int = 0
+    data: Any | None = None
+    message: str = "success"
+
+
+class TenantInviteBodyDoc(BaseModel):
+    email: str
+
+
+class TeamUserRecordDoc(BaseModel):
+    id: str | None = None
+    user_id: str | None = None
+    tenant_id: str | None = None
+    email: str | None = None
+    nickname: str | None = None
+    avatar: str | None = None
+    role: str | None = None
+    status: str | int | None = None
+    update_date: str | None = None
+    delta_seconds: int | float | None = None
+
+
+class TeamUserListResponseDoc(BaseModel):
+    code: int = 0
+    data: list[TeamUserRecordDoc]
+    message: str = "success"
+
+
 @manager.route("/<tenant_id>/user/list", methods=["GET"])  # noqa: F821
 @login_required
+@tag(["Teams"])
+@document_response(TeamUserListResponseDoc)
+@document_response(ErrorResponse, 400)
 def user_list(tenant_id):
+    """List users in a team."""
     if current_user.id != tenant_id:
         return get_json_result(
             data=False,
@@ -49,7 +93,12 @@ def user_list(tenant_id):
 @manager.route('/<tenant_id>/user', methods=['POST'])  # noqa: F821
 @login_required
 @validate_request("email")
+@tag(["Teams"])
+@document_request(TenantInviteBodyDoc)
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 async def create(tenant_id):
+    """Invite a user to a team."""
     if current_user.id != tenant_id:
         return get_json_result(
             data=False,
@@ -107,7 +156,11 @@ async def create(tenant_id):
 
 @manager.route('/<tenant_id>/user/<user_id>', methods=['DELETE'])  # noqa: F821
 @login_required
+@tag(["Teams"])
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 def rm(tenant_id, user_id):
+    """Remove a user from a team."""
     if current_user.id != tenant_id and current_user.id != user_id:
         return get_json_result(
             data=False,
@@ -123,7 +176,11 @@ def rm(tenant_id, user_id):
 
 @manager.route("/list", methods=["GET"])  # noqa: F821
 @login_required
+@tag(["Teams"])
+@document_response(TeamUserListResponseDoc)
+@document_response(ErrorResponse, 400)
 def tenant_list():
+    """List teams for the current user."""
     try:
         users = UserTenantService.get_tenants_by_user_id(current_user.id)
         for u in users:
@@ -135,7 +192,11 @@ def tenant_list():
 
 @manager.route("/agree/<tenant_id>", methods=["PUT"])  # noqa: F821
 @login_required
+@tag(["Teams"])
+@document_response(GenericSuccessResponse)
+@document_response(ErrorResponse, 400)
 def agree(tenant_id):
+    """Accept a team invitation."""
     try:
         UserTenantService.filter_update([UserTenant.tenant_id == tenant_id, UserTenant.user_id == current_user.id],
                                         {"role": UserTenantRole.NORMAL})
