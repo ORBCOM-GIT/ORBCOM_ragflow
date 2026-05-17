@@ -83,6 +83,12 @@ def agent_id(HttpApiAuth, request):
 class TestAgentSessions:
 
     @pytest.mark.p2
+    def test_create_agent_session_with_name(self, HttpApiAuth, agent_id):
+        res = create_agent_session(HttpApiAuth, agent_id, payload={"name": "my_named_session"})
+        assert res["code"] == 0, res
+        assert res["data"]["name"] == "my_named_session", res
+
+    @pytest.mark.p2
     def test_agent_crud_validation_contract(self, HttpApiAuth, agent_id):
         res = list_agents(HttpApiAuth, {"id": "missing-agent-id", "title": "missing-agent-title"})
         assert res["code"] == 0, res
